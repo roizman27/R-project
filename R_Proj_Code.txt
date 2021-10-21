@@ -1,0 +1,149 @@
+library(readxl)
+library("dplyr")
+library(tidyverse)
+library("ggpubr")
+library(multcompView)
+library(DescTools)
+library(PMCMRplus)
+library("gridExtra")
+library(kableExtra)
+
+
+Eco_data <- read_excel("C:/Users/roizm/Desktop/files/R_proj_data .xlsb.xlsx", sheet = "Data")
+
+
+# EDA
+
+Plots_Deep <- Eco_data %>% filter(Depth == "D")
+Plots_Shallow <- Eco_data %>% filter(Depth == "S")
+
+Shallow_max <- max(Plots_Shallow$Richness)
+
+sp <- ggscatter(Eco_data %>% 
+                filter(Depth == c("D","S")),
+                x = "Treatment", y = "Richness",
+                color = "Treatment", palette = "jco",
+                size = 3, alpha = 0.5, ) + 
+                border() + geom_hline(aes(yintercept = Shallow_max)) + 
+                ggtitle("Graph A: Plot Richness By Treatment")
+
+yplot <- ggdensity(Eco_data %>% 
+                   filter(Depth == c("D","S")),
+                   "Richness", fill = "Depth", 
+                   palette = "jco", alpha = 0.5) +
+                   rotate()
+yplot <- yplot + clean_theme() 
+
+ggarrange(sp, yplot, 
+          ncol = 2, nrow = 1,  align = "hv", 
+          widths = c(2.5, 1))
+
+# t.test Deep VS. Shallow
+
+Deep_Control <- Eco_data %>% filter(Depth == "D", Treatment=="O")
+Shallow_Control <- Eco_data %>% filter(Depth == "S", Treatment=="O")
+
+depth_diff_test <- t.test(Plots_Deep$Richness,Plots_Shallow$Richness)
+depth_diff_test
+round(depth_diff_test$p.value,8)
+
+m = c(mean(Plots_Deep$Richness), mean(Plots_Shallow$Richness))
+names(m) = c("D", "S")
+se = c(sd(Plots_Deep$Richness)/sqrt(length(Plots_Deep$Richness)), 
+             sd(Plots_Shallow$Richness)/sqrt(length(Plots_Shallow$Richness)))
+bp = barplot(m, ylim=c(0,15), main="Graph B: The Diffrance in Richness",
+             xlab="Depth",
+             ylab="Mean Richness",
+             sub="p.value = 9.944e-05", 
+             xpd=FALSE)
+arrows(x0=bp, y0=m-se, y1=m+se, code=3, angle=90)
+
+
+# ANOVA Tests
+
+Plots_Deep <- Eco_data %>% filter(Depth == "D")
+Plots_Shallow <- Eco_data %>% filter(Depth == "S")
+
+aov_Deep <- aov(Richness ~ Treatment, data = Plots_Deep)
+aov_Shallow <- aov(Richness ~ Treatment, data = Plots_Shallow)
+aov_data <- aov(Richness ~ Treatment + Depth, data = Eco_data)
+
+summary(aov_Deep)
+summary(aov_Shallow)
+summary(aov_data)
+
+par(mfrow=c(3,2))
+
+plot(aov_data,1, main = "All Plots")
+plot(aov_data,2)
+
+plot(aov_Deep,1, main = "Deep Plots")
+plot(aov_Deep,2)
+
+plot(aov_Shallow,1, main = "Shallow Plots")
+plot(aov_Shallow,2)
+
+dev.off()
+
+
+# Shapiro-Wilk normality test
+
+shapiro_data <- shapiro.test(residuals(aov_data))
+shapiro_deep <- shapiro.test(residuals(aov_Deep))
+shapiro_Shallow <- shapiro.test(residuals(aov_Shallow))
+
+shapiro_data
+shapiro_deep
+shapiro_Shallow
+
+# Dunnet test for deep plots 
+
+Deep_Control <- Eco_data %>% filter(Depth == "D", Treatment == "O")
+Deep_Clipping <- Eco_data %>% filter(Depth == "D", Treatment == "C")
+Deep_NPK <- Eco_data %>% filter(Depth == "D", Treatment == "N")
+Deep_P <- Eco_data %>% filter(Depth == "D", Treatment == "P")
+Deep_NP <- Eco_data %>% filter(Depth == "D", Treatment == "NP")
+Deep_OC <- Eco_data %>% filter(Depth == "D", Treatment == "OC")
+Deep_OCNP <- Eco_data %>% filter(Depth == "D", Treatment == "OCNP")
+na_vec <- rep(NA,16)
+
+data_treatment <- as.data.frame(matrix(, nrow = 22, ncol = 7))
+colnames(data_treatment) <- levels(factor(Eco_data$Treatment))
+data_treatment$O <- Deep_Control$Richness
+data_treatment$C <- Deep_Clipping$Richness
+data_treatment$N <- Deep_NPK$Richness
+data_treatment$P <- c(Deep_P$Richness, na_vec)
+data_treatment$NP <- c(Deep_NP$Richness, na_vec)
+data_treatment$OC <- c(Deep_OC$Richness, na_vec)
+data_treatment$OCNP <- c(Deep_OCNP$Richness, na_vec)
+
+Deep_dunnet_test <- dunnettTest(x = data_treatment, g = Deep_Control$Richness)
+summary(Deep_dunnet_test)
+
+# box plots for anova
+
+box_all <- ggboxplot(Eco_data, x = "Treatment", y = "Richness",
+                     color = "Treatment", fill = "Treatment", palette = "jco",
+                     ylab = "Richness", xlab = "Treatment") + ggtitle("Graph C: Plot Richness by Treatment")
+box_deep <- ggboxplot(Plots_Deep, x = "Treatment", y = "Richness",
+                      fill = "Treatment", color = "Treatment", palette = "jco",
+                      ylab = "Richness", xlab = "Treatment") + 
+                      ggtitle("Graph D: Plot Richness by Treatment\nfor deep plots")
+box_shallow <- ggboxplot(Plots_Shallow, x = "Treatment", y = "Richness", 
+                         fill = "Treatment", color = "Treatment", palette = "jco",
+                         ylab = "Richness", xlab = "Treatment") + 
+                         ggtitle("Graph E: Plot Richness by Treatment\nfor shallow plots")
+
+ggarrange(box_all, 
+          ggarrange(box_deep, box_shallow, ncol = 2), 
+          nrow = 2)
+
+
+# data tables
+
+kbl(caption = "ANOVA Deep Plots",coef(summary(lm(aov_Deep)))) %>%
+  kable_classic(full_width = F, html_font = "Cambria")
+
+kbl(caption = "ANOVA Shallow Plots",coef(summary(lm(aov_Shallow)))) %>%
+  kable_classic(full_width = F, html_font = "Cambria")
+
