@@ -9,7 +9,7 @@ library("gridExtra")
 library(kableExtra)
 
 
-Eco_data <- read_excel("C:/Users/roizm/Desktop/files/R_proj_data .xlsb.xlsx", sheet = "Data")
+Eco_data <- read_excel("Eco_Data.xlsx", sheet = "Data")
 
 
 # EDA
